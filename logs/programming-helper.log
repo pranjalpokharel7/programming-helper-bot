@@ -1,0 +1,23 @@
+2020-08-10 00:01:11,256 : INFO : discord.client:logging in using static token
+2020-08-10 00:01:18,064 : INFO : discord.gateway:Created websocket connected to wss://gateway.discord.gg?encoding=json&v=6&compress=zlib-stream
+2020-08-10 00:01:18,067 : INFO : discord.gateway:Shard ID None has sent the IDENTIFY payload.
+2020-08-10 00:01:18,480 : INFO : discord.gateway:Shard ID None has connected to Gateway: ["gateway-prd-main-t1zv",{"micros":72977,"calls":["discord-sessions-prd-2-80",{"micros":71438,"calls":["start_session",{"micros":68027,"calls":["api-prd-main-t598",{"micros":61638,"calls":["get_user",{"micros":6377},"add_authorized_ip",{"micros":3252},"get_guilds",{"micros":3285},"coros_wait",{"micros":1}]}]},"guilds_connect",{"micros":1,"calls":[]},"presence_connect",{"micros":1,"calls":[]}]}]}] (Session ID: fbdbc0cec78b4f606405a40c0b5a2c8d).
+2020-08-10 00:01:20,497 : INFO : discord:Programming Helper is online.
+2020-08-10 00:02:43,414 : INFO : discord:help was called successfully by d_ude95
+2020-08-10 00:02:57,339 : INFO : discord:ask was called successfully by d_ude95
+2020-08-10 00:03:19,157 : INFO : discord:ask was called successfully by d_ude95
+2020-08-10 00:03:32,246 : INFO : discord:help was called successfully by d_ude95
+2020-08-10 00:04:02,010 : INFO : discord:ask was called successfully by d_ude95
+2020-08-10 00:04:32,637 : INFO : discord:rank was called successfully by ppok24
+2020-08-10 00:05:07,041 : INFO : discord:help was called successfully by d_ude95
+2020-08-10 00:05:20,483 : INFO : discord:rank was called successfully by d_ude95
+2020-08-10 00:06:23,938 : INFO : discord:rank was called successfully by d_ude95
+2020-08-10 00:06:54,019 : INFO : discord:ask was called successfully by ppok24
+2020-08-10 00:07:36,775 : INFO : discord:rank was called successfully by d_ude95
+2020-08-10 00:08:02,870 : INFO : discord:help was called successfully by d_ude95
+2020-08-10 00:08:10,548 : INFO : discord:rank was called successfully by ppok24
+2020-08-10 00:08:15,658 : INFO : discord:rank was called successfully by d_ude95
+2020-08-10 00:10:40,170 : INFO : discord.client:Cleaning up tasks.
+2020-08-10 00:10:40,171 : INFO : discord.client:Cleaning up after 5 tasks.
+2020-08-10 00:10:40,511 : INFO : discord.client:All tasks finished cancelling.
+2020-08-10 00:10:40,511 : INFO : discord.client:Closing the event loop.
