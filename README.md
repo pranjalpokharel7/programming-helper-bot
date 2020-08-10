@@ -4,6 +4,8 @@ Discord bot to assist general programmers
 ### Command Prefix
 ph!
 
+*Important*: Please setup the server information fist using the `ph!setup` command before you run any other command, if this is the first time you're running the bot on your guild/server
+
 ### External Libraries Needed
 
 **discord.py**
