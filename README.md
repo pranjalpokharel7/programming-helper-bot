@@ -15,7 +15,7 @@ Installation command using pip: `pip install discord.py`
 
 ### How The Bot Works:
 Ask a question using `ph!ask @role`, the bot formats your question in a neat little embed and also allows other users to respond to your query using emotes.\
-When a question is answered, the original author who asked the question is sent answer in a neat embed in DM and also in the server channel.\
+When a question is answered, the original author who asked the question is sent answer in a neat embed in DM and also in the server channel.
 #### Commands List (Prefix - `ph!`):
 Command | Description
 --------|------------
