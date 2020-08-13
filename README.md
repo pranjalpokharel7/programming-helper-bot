@@ -15,13 +15,26 @@ Installation command using pip: `pip install discord.py`
 
 ### How The Bot Works:
 Ask a question using `ph!ask @role`, the bot formats your question in a neat little embed and also allows other users to respond to your query using emotes.\
-
+When a question is answered, the original author who asked the question is sent answer in a neat embed in DM and also in the server channel.\
+#### Commands List (Prefix - `ph!`):
+Command | Description
+--------|------------
+  help  |     Shows the help message
+  setup   |   Setup the server settings for the bot
+  rank  |   Display your current level and exp points
+  ask  |  Ask a question
+  welcome  |  Set the message to send to new guild users, default='None'
+  addrole  |  Add a role which you can ask using ph!ask
+  delrole  |  Remove the role for ph!ask command
+  hardreset  |  Reset the bot for the current server
+ 
+Default Roles
+We provide default roles that you can add in your sever for ph!ask commands. Simply create one of the below roles (copy and paste the names) in the guild and keep it below the bot in the role hierarchy:\
+`typescript  swift  sql  rust  ruby  php  perl  python  csharp  cpp  c_ r_  kotlin  java  javascript  haskell  golang  erlang  mac  linux  windows  `
+ 
 ### Notes:
 1) Anything you want to know about the bot, launch the bot in your server and use the command `ph!help` for instructions. Create a .env file in the same folder as your main directory and add the bot token there as `TOKEN=<your-bot-token>`
-2) This bot is far from complete, don't be an idiot and copy pase this code to launch your own bot. Be a smart contributor and help me fix my bugs.
-3) Timestamp: 00:16,10th August, 2020 - will try to complete the bot with advanced error handling and backup/database system in a week.
-4) Will update the full info + a proper, well documented README at the end of this week i.e. 00:00, 17th August, 2020.
-5) `asyncio` documentation is too damn confusing, I think I'll have to invest more time into it.
+2) Updates will be made on a regular basis on this repo, please inform us about any bugs you encountered while running the bot.
 
 ### Thanks to:
-@Zero5620 for helping me test my bot and giving sound advice on discord bot making process.
+@Zero5620 for helping me test my bot and giving sound advice on discord bot making process. Check out his repo, he has some more bots to boast of.
