@@ -3,7 +3,6 @@ import discord
 import logging
 import asyncio
 import json
-
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -46,43 +45,61 @@ allowed_roles = {
     "windows":739911639586832516
 }
 
-# Load server info, message data and user data during initialization into these global variables
+# Load server info, message data, user data and other info during initialization into these global variables
 server_info = {}
 user_data = {}
 messages_data = {}
 custom_roles = {}
+welcome_message = {}
+
+# Previous values to be written in file, on bot close, update from the current info
+prev_messages_data = {}
+prev_user_data = {}
+
+# Load the data from the file before the bot runs
+with open('files/servers.json','r') as f:
+    server_info = json.load(f)
+
+with open('files/roles.json','r') as f:
+    custom_roles = json.load(f)
+
+with open('files/users.json','r') as f:
+    user_data = json.load(f)
+prev_user_data.update(user_data.copy())
+
+with open('files/messages.json','r') as f:
+    messages_data = json.load(f)
+prev_messages_data.update(messages_data.copy())  
+
+with open('files/welcomes.json','r') as f:
+    welcome_message = json.load(f)
+
+# ---------------------- Bot Start - On Ready ---------------------- #
 
 @bot.event
 async def on_ready():
+    update_files.start()
     logger.info(f"{bot.user.name} is online.")
     print(f"{bot.user.name} is online.")
     await bot.change_presence(activity=discord.Game(name="Coding. Command prefix: ph!"))
     
-    with open('files/servers.json','r') as f:
-        temp_info_server = json.load(f)
-    server_info.update(temp_info_server)
-
-    with open('files/users.json','r') as f:
-        temp_info_user = json.load(f)
-    user_data.update(temp_info_user)
-
-    with open('files/messages.json','r') as f:
-        temp_info_message = json.load(f)
-    messages_data.update(temp_info_message)
-
-    with open('files/roles.json','r') as f:
-        temp_custom_roles = json.load(f)
-    custom_roles.update(temp_custom_roles)
-
-    update_files.start()
-    
 # ---------------------- Ask Command - Helper Functions ---------------------- #
 
 async def add_reaction(message, *reactions):
+    """
+        Helper function to add reactions to a message.
+    """
     for reaction in reactions:
-        await message.add_reaction(reaction)
+        try:
+            await message.add_reaction(reaction)
+        except discord.HTTPException:
+            await message.channel.send('Failed to add reaction due to HTTP Error, your text will be displayed but users will not be able to upvote or answer it.\nSorry for the inconvenience, please retry if needed.')
+            return
 
 async def ask_question(ctx, emb_color):
+    """
+        Helper function to create a question embed.
+    """
     emb = discord.Embed(
         title = "Add a question:",
         description = "Type your question and send. Enter 'done' when you are done with the process. Enter 'nope' to terminate the process.",
@@ -91,6 +108,9 @@ async def ask_question(ctx, emb_color):
     await ctx.send(embed=emb)
 
 async def answer_question(channel):
+    """
+        Helper function to create an answer embed.
+    """
     emb = discord.Embed(
         title = "Add a response/answer",
         description = "Keep on messaging your response. Enter a single word 'done' to terminate the process. Enter 'nope' to terminate the process.",
@@ -100,11 +120,11 @@ async def answer_question(channel):
 
 # ---------------------- Level Up - Helper Functions ---------------------- #
 
-# Level Up EXP required : int((level ** 3) * 600)
-# Level 1: Default (0 XP)
-# Level 2: 4800 (i.e. 8 * 600 XP), and so on
-
 async def add_user_data(user, server_id):
+    """
+        Helper function to add user data for rank and experience updates.
+    """
+    prev_user_data.update(user_data)
     user_id = str(user.id)
     server_id = str(server_id)
 
@@ -117,18 +137,26 @@ async def add_user_data(user, server_id):
         user_data[server_id][user_id]['experience'] = 0
 
 async def add_experience(user, exp_points, server_id):
+    """
+        Helper function to add/update the user.
+    """
+    prev_user_data.update(user_data)
     user_id = str(user.id)
     server_id = str(server_id)
     user_data[server_id][user_id]['experience'] += int(exp_points * 1000)
 
 async def level_up(user, channel):
+    """
+        Helper function to update the level of the user if the conditions are met.
+    """
+    prev_user_data.update(user_data)
     server_id = str(channel.guild.id)
     user_id = str(user.id)
 
     current_experience = user_data[server_id][user_id]['experience']
     current_level = user_data[server_id][user_id]['level']
     next_level = current_level + 1
-    level_EXP_required = (next_level ** 3) * 600
+    level_EXP_required = (next_level ** 3) * 600 # Modify the formula here if needed
 
     if current_experience >= level_EXP_required:
         try:
@@ -143,6 +171,9 @@ async def level_up(user, channel):
         user_data[server_id][user_id]['level'] = next_level
 
 async def display_rank(user, channel):
+    """
+        Helper function that displays the rank of the current user, used by ph!rank exclusively.
+    """
     user_id = str(user.id)
     server_id = str(channel.guild.id)
 
@@ -161,42 +192,147 @@ async def display_rank(user, channel):
 
 # ---------------------- Background Tasks ---------------------- #
 
-@tasks.loop(seconds=300)
+@tasks.loop(minutes=15)
 async def update_files():
-    with open('files/servers.json','w') as f:
-        json.dump(server_info,f)
+    """
+        Run a background task that handles file handling processes and creates backups on a regular interval
+    """
+    temp_messages_data = {}
+    temp_user_data = {}
+
+    try:
+        temp_messages_data.update(messages_data.copy())
+    except (ValueError, SyntaxError):
+        # If the current user data is corrupted, use previous data and set the current data to previous one
+        temp_messages_data.update(prev_messages_data.copy())
+        messages_data.clear()
+        messages_data.update(prev_messages_data)
+    
+    try: 
+        temp_user_data.update(user_data.copy())
+    except (ValueError, SyntaxError):
+        # If the current user data is corrupted, use previous data and set the current data to previous one
+        temp_user_data.update(prev_user_data.copy())
+        user_data.clear()
+        user_data.update(prev_user_data)
 
     with open('files/users.json','w') as f:
-        json.dump(user_data,f)
+        json.dump(temp_user_data,f)
 
     with open('files/messages.json','w') as f:
-        json.dump(messages_data,f)
+        json.dump(temp_messages_data,f)
 
-    with open('files/roles.json','w') as f:
-        json.dump(custom_roles,f)
-
-    logger.info("5 minutes up, file backup completed!")
+    logger.info("15 minutes up, file backup completed!")
+    print("15 minutes up, file backup completed!")
 
 # ---------------------- Bot Commands ---------------------- #
 
 @bot.command()
 async def help(ctx):
+    """
+        Displays the help menu embed.\n
+        Command Format: ph!help
+    """
     role_list = "typescript  swift  sql  rust  ruby  php  perl  python  mac  linux  kotlin  java  javascript  haskell  golang  erlang  csharp  cpp  windows  c_  r_"
     emb = discord.Embed(
         title="Help Menu",
         colour=discord.Colour.green()
     )
-    emb.add_field(name="ph!setup", value="Set the level system of the guild/server. **User needs to have admin access.**", inline=False)
-    emb.add_field(name="ph!ask @role", value="Ask a question about a role. React with :arrows_counterclockwise: to answer the question. **Bot requires permissions in the channel: manage_messages=True, manage_roles=True**", inline=False)
+    emb.add_field(name="ph!setup", value="Set the level system of the guild/server. **Command user needs to have admin access.**", inline=False)
+    emb.add_field(name="ph!hardreset", value="Hard reset the bot for the particular guild/server. **Command user needs to have admin access.**", inline=False)
+    emb.add_field(name="ph!ask @role", value="Ask a question about a role. :arrows_counterclockwise: to answer the question, :arrow_up: to upvote and :white_check_mark: to mark it solved. **Bot requires permissions in the channel: manage_messages=True, manage_roles=True**", inline=False)
     emb.add_field(name="ph!rank", value="See your level and exp points as of now.", inline=False)
-    emb.add_field(name="ph!addrole @role <web-url-to-thumnail-image>", value="Add a role to/about which questions can be asked. URL to thumbnail image is optional. **User needs to have admin access.**", inline=False)
-    emb.add_field(name="ph!delrole @role", value="Delete a role from being asked a question. The server role will NOT be deleted, only ph!ask command's access to it will be removed. **User needs to have admin access.**", inline=False)
-    emb.add_field(name="default roles", value="We provide default roles that you can add in your sever for ph!ask commands (copy paste the role names and create a role below Programming Helper in the role hierarchy)", inline=False)
-    emb.add_field(name="roles we provide by default", value=role_list, inline=False)
+    emb.add_field(name="ph!welcome", value="Set the welcome message for users new to the server. By default, no message is sent to the new user. **Command user needs to have admin access.**", inline=False)
+    emb.add_field(name="ph!addrole @role <web-url-to-thumnail-image>", value="Add a role to/about which questions can be asked. URL to thumbnail image is optional. **Command user needs to have admin access.**", inline=False)
+    emb.add_field(name="ph!delrole @role", value="Delete a role from being asked a question. The  actual server role will NOT be deleted. **Command user needs to have admin access.**", inline=False)
+    emb.add_field(name="Default Roles", value=f"We provide default roles that you can add in your sever for ph!ask commands (create one of the below roles in the guild) : \n*{role_list}*", inline=False)
     await ctx.send(embed=emb)
 
 @bot.command()
+@commands.has_permissions(administrator=True)
+async def reset(ctx):
+    """
+        Performs a hard reset of the bot. 
+        User roles will not be taken away but the messages data, user experience, custom roles and server setup will be wiped.
+        Use in case the bot becomes unresponsive to the commands, for a hard fix, wiping user data as well. Needs administrative access.\n
+        Command Format: ph!reset
+    """
+    await ctx.send("Are you really sure you want to reset all bot data?\nNote: This will not take away the roles assigned by the bot but the user exp will be reset.\nEnter **yes** to continue, **nope** to cancel")
+    confirmation = await bot.wait_for('message', check=lambda message: message.author == ctx.author, timeout=300)
+    if confirmation.content.lower() == "yes":
+        server_id = str(ctx.guild.id)
+
+        # Reset data here
+        messages_data[server_id] = []
+        custom_roles[server_id].clear()
+        user_data[server_id].clear()
+        server_info[server_id].clear()
+        welcome_message[server_id] = ""
+
+        # Clean up the files
+        with open('files/servers.json','w') as f:
+            json.dump(server_info,f)
+        
+        with open('files/roles.json','w') as f:
+            json.dump(custom_roles,f)
+
+        with open('files/users.json','w') as f:
+            json.dump(user_data,f)
+        
+        with open('files/servers.json','w') as f:
+            json.dump(messages_data,f)
+        
+        with open('files/welcomes.json','w') as f:
+            json.dump(welcome_message,f)
+
+        await ctx.send('Reset Completed!')
+        
+    else:
+        await ctx.send("Reset Cancelled!")
+        return
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def welcome(ctx):
+    """
+        Set the welcome message for the user who just joined the server/guild. 
+        The bot will DM the new user with the message set using this command.
+        If not configured, no messages will be sent to new users.\n
+        Command Format: ph!welcome
+    """
+    server_id = str(ctx.guild.id)
+    welcome_string = ""
+    if not server_id in welcome_message.keys():
+        welcome_message[server_id] = {}
+    
+    await ctx.send("Type the strings one by one and enter 'done' when you're finished.\nEnter 'nope' to cancel.")
+    while True:
+        try:
+            welcome = await bot.wait_for('message', check=lambda message: message.author == ctx.author, timeout=300)
+        except asyncio.TimeoutError:
+            await ctx.send("Due to no response from the user in 5 minutes, the welcome message setting process is terminated.")
+            return
+        
+        if welcome.content.lower() == 'done':
+            break
+        if welcome.content.lower() == 'nope':
+            welcome_string = ""
+            return
+
+        welcome_string = welcome_string + welcome.content + "\n"
+    
+    welcome_string = welcome_string + "\nUse ph!help in the server I am in to see my functionalities. My command prefix is: `ph!help`"
+    welcome_message[server_id] = welcome_string
+    with open('files/welcomes.json','w') as f:
+        json.dump(welcome_message,f)
+    await ctx.send("Welcome message stored successfully!")
+
+@bot.command()
 async def rank(ctx):
+    """
+        Displays the level and the experience point of the user who invokes the command.\n
+        Command Format: ph!rank
+    """
     user = ctx.message.author
     server_id = ctx.guild.id
     await add_user_data(user=user, server_id=server_id)
@@ -205,18 +341,18 @@ async def rank(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def addrole(ctx, *message):
+    """
+        Add a new role to which questions can now be asked using the ph!ask command.\n
+        Command Format: ph!addrole @role
+    """
     role = ctx.message.role_mentions    
     server_id = str(ctx.guild.id)
 
     if not server_id in custom_roles.keys():
         custom_roles[server_id] = {}
 
-    if len(role) == 0:
-        await ctx.send("Please include at least one role mention!")
-        return
-    
-    if len(role) > 1:
-        await ctx.send("Please make only one role mention at a time!")
+    if len(role) != 1:
+        await ctx.send("Please use the valid format: ```ph!addrole @role <link-optional>```")
         return
     
     if len(message) > 2:
@@ -229,25 +365,28 @@ async def addrole(ctx, *message):
 
     if len(message) == 1:
         custom_roles[server_id].update({str(role[0].name) : r'https://cdn.discordapp.com/emojis/741984835698163742'})
-    
+
+    with open('files/roles.json','w') as f:
+        json.dump(custom_roles,f)
     await ctx.send("Role added successfully!")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def delrole(ctx):
+    """
+        Delete a custom role wich you previously added using the ph!addrole command.
+        The ph!ask command will no longer have access to the role.\n
+        Command Format: ph!delrole @role
+    """
     role = ctx.message.role_mentions    
     server_id = str(ctx.guild.id)
 
     if not server_id in custom_roles.keys():
-        print('Test 1')
+        await ctx.send("No custom roles added yet.")
         return
 
-    if len(role) == 0:
-        await ctx.send("Please include at least one role mention!")
-        return
-    
-    if len(role) > 1:
-        await ctx.send("Please make only one role mention at a time!")
+    if len(role) != 1:
+        await ctx.send("Please include at least (and not more than) one role mention!")
         return
     
     roleName = role[0].name
@@ -262,6 +401,11 @@ async def delrole(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup(ctx):
+    """
+        Command to set up the server settings, particularly which channel to deploy the ph!ask capabilities, thus preventing spam in unwanted channels.
+        Also sets up the levelling system and the roles to award when a user attains a certain level.\n
+        Command Format: ph!setup
+    """
     server_id = str(ctx.guild.id)
     role_by_level = {}
     role_by_level[server_id] = {}
@@ -288,12 +432,8 @@ async def setup(ctx):
             return
         
         role = role_message.role_mentions
-        if len(role) == 0:
-            await ctx.send("Please include at least one role!")
-            await ctx.send("Process terminated.")
-            return
-        if len(role) > 1:
-            await ctx.send("Please make only one role mention at a time!")
+        if len(role) != 1:
+            await ctx.send("Please include at least (and not more than) one role!")
             await ctx.send("Process terminated.")
             return
         role_by_level[server_id][level+2] = role[0].name
@@ -308,28 +448,38 @@ async def setup(ctx):
 
     channel_mentions = channel_for_bot.channel_mentions
 
-    if len(role) == 0:
-        await ctx.send("Please include at least one channel_mention! Process is terminated...")
-        return
-    
-    if len(role) > 1:
-        await ctx.send("Please make only one channel_mention at a time! Process is terminated...")
+    if len(role) != 1:
+        await ctx.send("Please include at least (and not more than) one  channel_mention! Process is terminated...")
         return
 
     role_by_level[server_id]["channel_id"] = channel_mentions[0].id
     server_info.update(role_by_level)
+
+    # Since setup is only done at most once, no need to back it up in a background process continously, just run it once 
+    with open('files/servers.json','w') as f:
+        json.dump(server_info,f)
+
     await ctx.send('Setup Complete!')
 
 @bot.command()
 @commands.bot_has_permissions(manage_messages=True, manage_roles=True)
 async def ask(ctx):
+    """
+        Ask a question about a role. Only default roles can be asked a question about, or a role added using ph!addrole.\n
+        Command Format: ph!ask @role
+    """
+    prev_messages_data.update(messages_data.copy())
     server_id = str(ctx.guild.id)
 
     if not server_id in messages_data.keys():
         messages_data[server_id] = []
 
-    if ctx.message.channel.id != server_info[server_id]["channel_id"]:
-        await ctx.send("You can not use the command in this channel!\nChange target channel using ph!setup (admin acess required)")
+    try:
+        if ctx.message.channel.id != server_info[server_id]["channel_id"]:
+            await ctx.send("You can not use the command in this channel!\nChange target channel using ph!setup (admin acess required)")
+            return
+    except KeyError:
+        await ctx.send("The server has not been set up yet!")
         return
 
     role = ctx.message.role_mentions
@@ -337,14 +487,10 @@ async def ask(ctx):
     server_id = str(ctx.guild.id)
     
     messages_to_clean_up = [ctx.message]
-    question_full = []
+    question_full_string = ""
 
-    if len(role) == 0:
-        await ctx.send("Please include at least one mention!")
-        return
-    
-    if len(role) > 1:
-        await ctx.send("Please make only one mention at a time!")
+    if len(role) != 1:
+        await ctx.send("Please include at least (and not more than) one mention!")
         return
 
     role_name = role[0].name
@@ -375,7 +521,11 @@ async def ask(ctx):
     
     # Ask for a question
     await ask_question(ctx, role_color)
-    ask_message_embed = await ctx.channel.fetch_message(ctx.channel.last_message_id)
+    try:
+        ask_message_embed = await ctx.channel.fetch_message(ctx.channel.last_message_id)
+    except (discord.NotFound, discord.HTTPException):
+        await ctx.send('Something went wrong, either the original message was not found or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+        return
     messages_to_clean_up.append(ask_message_embed)
 
     # Run an infinite loop until the user inputs 'done', 'nope' or timeout occurs due to no user response in 5 mins
@@ -396,16 +546,12 @@ async def ask(ctx):
             await ctx.channel.delete_messages(messages_to_clean_up)
             return
 
-        question_full.append(question)
+        question_full_string = question_full_string + question.content + "\n"
         messages_to_clean_up.append(question)
 
-    if len(question_full) == 0:
+    if len(question_full_string) == 0:
         await ctx.channel.delete_messages(messages_to_clean_up)
         return
-
-    question_text_complete = ''
-    for message in question_full:
-        question_text_complete = question_text_complete + message.content + "\n"
 
     # Create embed
     emb = discord.Embed(
@@ -413,21 +559,29 @@ async def ask(ctx):
         colour = role_color
     )
     emb.set_author(name=author.display_name, icon_url=author.avatar_url)
-    emb.add_field(name="**#Question**",value=question_text_complete, inline=False)
+    emb.add_field(name="**#Question**",value=question_full_string, inline=False)
     emb.set_thumbnail(url=thumbnail_url)
     emb.set_footer(text="Upvote ⬆️ | Answer | Mark Solved")
 
     # Deleting the original messages and sending the embed
     await ctx.send('Cleaning up...wait for a few seconds...')
-    await ctx.channel.delete_messages(messages_to_clean_up)
-    await ctx.channel.purge(limit=1) # delete the most recent message
+    try:
+        await ctx.channel.delete_messages(messages_to_clean_up)
+        await ctx.channel.purge(limit=1) # delete the most recent message
+    except discord.HTTPException:
+        pass
+
     await ctx.send(embed=emb)
 
     # Add emojis to the embed
     bot_message_id = ctx.channel.last_message_id
     messages_data[server_id].append(bot_message_id)
 
-    bot_message = await ctx.channel.fetch_message(bot_message_id)
+    try:
+        bot_message = await ctx.channel.fetch_message(bot_message_id)
+    except (discord.NotFound, discord.HTTPException):
+        await ctx.send('Something went wrong, either the original message could not be fetched or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+        return
     await add_reaction(bot_message,'⬆️','🔄','✅')
     
     await add_user_data(user=author, server_id=server_id)
@@ -440,31 +594,34 @@ async def ask(ctx):
 async def on_member_join(member):
     server_id = str(member.guild.id)
     await add_user_data(user=member, server_id=server_id)
+    if len(welcome_message[server_id]) > 0:
+        await member.send(welcome_message[server_id])
 
-# on adding reactions
 @bot.event
 @commands.bot_has_permissions(manage_messages=True, manage_roles=True)
 async def on_raw_reaction_add(payload):
-    message_id = payload.message_id
-    user_id = payload.user_id
-    guild_id = payload.guild_id
-    channel_id = payload.channel_id
+    prev_messages_data.update(messages_data.copy())
+    message_id, channel_id, guild_id, user_id = (payload.message_id, payload.channel_id, payload.guild_id, payload.user_id)
 
     if user_id == 741382171515945070: # id of the bot, ignore reaction event from bot itself
         return
 
     if channel_id != server_info[str(guild_id)]["channel_id"]: # not the configured channel, ignore reaction event
         return
-
-    answer_full = []
+    
+    answer_full_string = ""
     messages_to_clean_up = []
 
     guild = discord.utils.find(lambda g: g.id == guild_id, bot.guilds)
     channel = discord.utils.find(lambda c: c.id == channel_id, guild.channels)
 
-    if message_id in messages_data[str(guild_id)]:
+    if message_id in reversed(messages_data[str(guild_id)]):
         user = payload.member # Can only fetch this property for on_reaction_add
-        message = await channel.fetch_message(message_id)
+        try:
+            message = await channel.fetch_message(message_id)
+        except:
+            await channel.send('Something went wrong, either the original message could not be fetched or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+            return
         
         embed_list = message.embeds
         message_embed = embed_list[0]
@@ -491,8 +648,12 @@ async def on_raw_reaction_add(payload):
         # Handle event in case of 'mark solved' being added
         if payload.emoji.name == '✅':            
             if user == original_author:
-                await channel.send(f"{original_author} do you really want to mark the question completed? Doing so will close the question, making other users unable to answer/upvote to it. Enter **'yes'** to continue and **'nope'** to cancel.")
-                bot_query = await channel.fetch_message(channel.last_message_id)
+                await channel.send(f"{original_author} do you really want to mark the question completed? Doing so will close the question, making other users unable to answer/upvote to it. Enter **'yes'** to continue and **'nope'** to cancel.")                
+                try:
+                    bot_query = await channel.fetch_message(channel.last_message_id)
+                except:
+                    await channel.send('Something went wrong, either the original message could not be fetched or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+                    return
                 messages_to_clean_up.append(bot_query)
 
                 try:
@@ -504,8 +665,11 @@ async def on_raw_reaction_add(payload):
                     return
                 
                 if user_response.content.lower() == 'yes':
-                    await channel.purge(limit=1)
-                    await channel.delete_messages(messages_to_clean_up)
+                    try:
+                        await channel.purge(limit=1)
+                        await channel.delete_messages(messages_to_clean_up)
+                    except discord.HTTPException:
+                        pass
                     await message.clear_reactions()
                     messages_data[str(guild_id)].remove(message_id)
                 else:
@@ -519,7 +683,11 @@ async def on_raw_reaction_add(payload):
                 return
                     
             await answer_question(channel)
-            ask_answer = await channel.fetch_message(channel.last_message_id)
+            try:
+                ask_answer = await channel.fetch_message(channel.last_message_id)
+            except:
+                await channel.send('Something went wrong, either the original message could not be fetched or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+                return
             messages_to_clean_up.append(ask_answer)
 
             # Run an infinite loop until the user inputs 'done', 'nope' or timeout occurs due to no user response in 5 mins
@@ -541,39 +709,39 @@ async def on_raw_reaction_add(payload):
                     await message.remove_reaction('🔄',user)
                     return
                 
-                answer_full.append(answer_message)
+                messages_to_clean_up.append(answer_message)
+                answer_full_string = answer_full_string + answer_message.content + "\n"
 
             # If user inputs 'done' without entering anything before, invalidate the answer and remove the reaction
-            if len(answer_full) == 0:
+            if len(answer_full_string) == 0:
                 await channel.delete_messages(messages_to_clean_up)
                 await message.remove_reaction('🔄',user)
                 return
 
-            # Add all message.content in the form of a single string                
-            answer_text_complete = ''
-            for answer in answer_full:
-                answer_text_complete = answer_text_complete + answer.content + "\n"
-                messages_to_clean_up.append(answer)
-
-            # Fetch information about original request/question
-            question_title = message_embed.title
-
             # Create an embed of the answer
+            question_title = message_embed.title
             emb = discord.Embed(
                 title= f"Response to: \n{question_title}",
                 colour= discord.Colour.red()
             )
             emb.set_author(name=user.name, icon_url=user.avatar_url)
-            emb.add_field(name='Answer in full:', value=answer_text_complete, inline=False)
+            emb.add_field(name='Answer in full:', value=answer_full_string, inline=False)
             emb.set_footer(text='Upvote')
 
             await channel.send('Cleaning up...wait for a few seconds...')
-            await channel.delete_messages(messages_to_clean_up)
-            await channel.purge(limit=1)
+            try:
+                await channel.delete_messages(messages_to_clean_up)
+                await channel.purge(limit=1)
+            except discord.HTTPException:
+                pass
             await channel.send(embed=emb)
 
             # Add reactions to the answer embed
-            embed_message_id = await channel.fetch_message(channel.last_message_id)
+            try:
+                embed_message_id = await channel.fetch_message(channel.last_message_id)
+            except:
+                await channel.send('Something went wrong, either the original message could not be fetched or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+                return
             await add_reaction(embed_message_id, '⬆️')
             messages_data[str(guild_id)].append(embed_message_id.id)
                 
@@ -584,14 +752,11 @@ async def on_raw_reaction_add(payload):
             await add_experience(user=user, exp_points=2, server_id=guild_id) # provide 2 * 1000 exp_point for answering a question
             await level_up(user=user, channel=channel)
 
-# on_raw_reaction_remove is almost the same as on_raw_reaction_add, with only a few changes in the code
 @bot.event
 @commands.bot_has_permissions(manage_messages=True, manage_roles=True)
 async def on_raw_reaction_remove(payload):
-    message_id = payload.message_id
-    channel_id = payload.channel_id
-    guild_id = payload.guild_id
-    user_id = payload.user_id
+    prev_messages_data.update(messages_data.copy())
+    message_id, channel_id, guild_id, user_id = (payload.message_id, payload.channel_id, payload.guild_id, payload.user_id)
 
     if user_id == 741382171515945070: # id of the bot, ignore reactions from the bot itself
         return
@@ -603,9 +768,13 @@ async def on_raw_reaction_remove(payload):
     channel = discord.utils.find(lambda c: c.id == channel_id, guild.channels)
     user = discord.utils.find(lambda u: u.id == user_id, guild.members)
 
-    if message_id in messages_data[str(guild_id)]:
-        message = await channel.fetch_message(message_id)
-        
+    if message_id in reversed(messages_data[str(guild_id)]):
+        try:
+            message = await channel.fetch_message(message_id)
+        except (discord.HTTPException, discord.NotFound):
+            await channel.send('Something went wrong, either the original message was not found or a 404 HTTP Error occured.\nSorry for the inconvenience, please retry.')
+            return
+
         # Fetch info about the original embed
         embed_list = message.embeds
         message_embed = embed_list[0]
@@ -634,7 +803,6 @@ async def on_raw_reaction_remove(payload):
 
 # ---------------------- Logger Tasks ---------------------- #
 
-# check if the user inputs wrong commands/typos
 @bot.event
 async def on_command_error(ctx,error):
     if isinstance(error, commands.CommandNotFound):
@@ -646,7 +814,6 @@ async def on_command_error(ctx,error):
         return
     raise error
 
-# log for a successful command invocation
 @bot.event
 async def on_command_completion(ctx):
     logger.info(f"{ctx.invoked_with} was called successfully by {ctx.author.name}")
