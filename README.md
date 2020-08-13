@@ -13,6 +13,9 @@ ph!
 Documentation link: (https://discordpy.readthedocs.io/en/latest/index.html) \
 Installation command using pip: `pip install discord.py`
 
+### How The Bot Works:
+Ask a question using `ph!ask @role`, the bot formats your question in a neat little embed and also allows other users to respond to your query using emotes.\
+
 ### Notes:
 1) Anything you want to know about the bot, launch the bot in your server and use the command `ph!help` for instructions. Create a .env file in the same folder as your main directory and add the bot token there as `TOKEN=<your-bot-token>`
 2) This bot is far from complete, don't be an idiot and copy pase this code to launch your own bot. Be a smart contributor and help me fix my bugs.
